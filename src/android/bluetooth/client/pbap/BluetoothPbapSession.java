@@ -178,7 +178,6 @@ class BluetoothPbapSession implements Callback {
         Log.d(TAG, "Stop");
 
         stopObexSession();
-        stopRfcomm();
     }
 
     public void abort() {

@@ -65,12 +65,20 @@ final class BluetoothPbapObexSession {
         Log.d(TAG, "stop");
 
         if (mObexClientThread != null) {
-            try {
-                mObexClientThread.interrupt();
-                mObexClientThread.join();
-                mObexClientThread = null;
-            } catch (InterruptedException e) {
-            }
+            abort();
+            Thread t = new Thread(new Runnable() {
+                public void run () {
+                    Log.d(TAG, "Spawning a new thread for stopping obex session");
+                    try {
+                        mObexClientThread.interrupt();
+                        mObexClientThread.join();
+                        mObexClientThread = null;
+                    } catch (InterruptedException e) {
+                    }
+                }
+            });
+            t.start();
+            Log.d(TAG, "Exiting from the stopping thread");
         }
     }
 
@@ -82,13 +90,18 @@ final class BluetoothPbapObexSession {
              * since abort may block until complete GET is processed inside OBEX
              * session, let's run it in separate thread so it won't block UI
              */
-            (new Thread() {
-                @Override
-                public void run() {
+            Log.d(TAG, "aborting the ongoing request");
+            Thread t = new Thread(new Runnable() {
+            public void run () {
+                if (mObexClientThread != null && mObexClientThread.mRequest != null) {
+                    Log.d(TAG, "Spawning a new thread for aborting");
                     mObexClientThread.mRequest.abort();
                 }
-            }).run();
-        }
+            }
+            });
+            t.start();
+            Log.d(TAG, "Exiting from the abort thread");
+       }
     }
 
     public boolean schedule(BluetoothPbapRequest request) {
@@ -144,15 +157,18 @@ final class BluetoothPbapObexSession {
                 synchronized (this) {
                     try {
                         if (mRequest == null) {
+                            Log.d(TAG, "waiting for request");
                             this.wait();
                         }
                     } catch (InterruptedException e) {
+                        Log.d(TAG, "Interrupted");
                         mRunning = false;
                         break;
                     }
                 }
 
                 if (mRunning && mRequest != null) {
+                    Log.d(TAG, "before executing the request mRunning:" + mRunning);
                     try {
                         mRequest.execute(mClientSession);
                     } catch (IOException e) {
@@ -167,6 +183,7 @@ final class BluetoothPbapObexSession {
                         mSessionHandler.obtainMessage(OBEX_SESSION_REQUEST_FAILED, mRequest)
                                 .sendToTarget();
                     }
+                    Log.d(TAG, "after executing the request mRunning:" + mRunning);
                 }
 
                 mRequest = null;
