@@ -41,7 +41,6 @@ final class BluetoothMasRequestGetMessagesListing extends BluetoothMasRequest {
     public BluetoothMasRequestGetMessagesListing(String folderName, int parameters,
             BluetoothMasClient.MessagesFilter filter, int subjectLength, int maxListCount,
             int listStartOffset) {
-
         if (subjectLength < 0 || subjectLength > 255) {
             throw new IllegalArgumentException("subjectLength should be [0..255]");
         }
@@ -124,8 +123,8 @@ final class BluetoothMasRequestGetMessagesListing extends BluetoothMasRequest {
 
         if (oap.exists(OAP_TAGID_MSE_TIME)) {
             String mseTime = oap.getString(OAP_TAGID_MSE_TIME);
-
-            mServerTime = (new ObexTime(mseTime)).getTime();
+            if(mseTime != null )
+               mServerTime = (new ObexTime(mseTime)).getTime();
         }
     }
 

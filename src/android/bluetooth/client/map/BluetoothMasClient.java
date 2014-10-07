@@ -544,8 +544,10 @@ public class BluetoothMasClient {
         }
 
         public void setPeriod(Date filterBegin, Date filterEnd) {
-            periodBegin = (new ObexTime(filterBegin)).toString();
-            periodEnd = (new ObexTime(filterEnd)).toString();
+            if(filterBegin != null )
+                periodBegin = (new ObexTime(filterBegin)).toString();
+            if(filterEnd != null)
+                periodEnd = (new ObexTime(filterEnd)).toString();
         }
 
         public void setReadStatus(byte readfilter) {

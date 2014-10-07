@@ -91,8 +91,13 @@ public class BluetoothMapMessage {
         }
 
         mSubject = attrs.get("subject");
+        String dateTime = attrs.get("dateTime");
+        if(dateTime != null){
+            mDateTime = (new ObexTime(dateTime)).getTime();
+        } else {
+            mDateTime = null;
+        }
 
-        mDateTime = (new ObexTime(attrs.get("datetime"))).getTime();
 
         mSenderName = attrs.get("sender_name");
 
