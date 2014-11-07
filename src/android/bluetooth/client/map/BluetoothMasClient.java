@@ -452,11 +452,8 @@ public class BluetoothMasClient {
     }
 
     private void sendToClient(int event, boolean success, Object param) {
-        if (success) {
-            mCallback.obtainMessage(event, STATUS_OK, mMas.getId(), param).sendToTarget();
-        } else {
-            mCallback.obtainMessage(event, STATUS_FAILED, mMas.getId(), null).sendToTarget();
-        }
+        mCallback.obtainMessage(event, success ? STATUS_OK : STATUS_FAILED, mMas.getId(),
+            param).sendToTarget();
     }
 
     private class SocketConnectThread extends Thread {
