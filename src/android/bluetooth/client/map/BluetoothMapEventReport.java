@@ -37,13 +37,14 @@ import java.util.HashMap;
 public class BluetoothMapEventReport {
 
     private final static String TAG = "BluetoothMapEventReport";
+    public final static String EXTENDED_EVENT_REPORT_1_1 = "1.1";
 
     public enum Type {
         NEW_MESSAGE("NewMessage"), DELIVERY_SUCCESS("DeliverySuccess"),
         SENDING_SUCCESS("SendingSuccess"), DELIVERY_FAILURE("DeliveryFailure"),
         SENDING_FAILURE("SendingFailure"), MEMORY_FULL("MemoryFull"),
         MEMORY_AVAILABLE("MemoryAvailable"), MESSAGE_DELETED("MessageDeleted"),
-        MESSAGE_SHIFT("MessageShift");
+        MESSAGE_SHIFT("MessageShift"), READ_STATUS_CHANGED("ReadStatusChanged");
 
         private final String mSpecName;
 
@@ -57,6 +58,8 @@ public class BluetoothMapEventReport {
         }
     }
 
+    private final String mVersion;
+
     private final Type mType;
 
     private final String mHandle;
@@ -67,7 +70,18 @@ public class BluetoothMapEventReport {
 
     private final BluetoothMapBmessage.Type mMsgType;
 
+    private final String mSubject;
+
+    private final String mDatetime;
+
+    private final String mSenderName;
+
+    private final String mPriority;
+
     private BluetoothMapEventReport(HashMap<String, String> attrs) throws IllegalArgumentException {
+
+        mVersion = attrs.get("version");
+
         mType = parseType(attrs.get("type"));
 
         if (mType != Type.MEMORY_FULL && mType != Type.MEMORY_AVAILABLE) {
@@ -102,6 +116,22 @@ public class BluetoothMapEventReport {
         } else {
             mMsgType = null;
         }
+
+        if (mType == Type.NEW_MESSAGE && mVersion.equals(EXTENDED_EVENT_REPORT_1_1)) {
+            mSubject = attrs.get("subject");
+            mDatetime = attrs.get("datetime");
+            mSenderName = attrs.get("sender_name");
+            mPriority = attrs.get("priority");
+
+            Log.d(TAG, "received extended event report 1.1 for new message" +
+                    " Subject: " + mSubject + " Datetime: " + mDatetime +
+                    " sender_name: " + mSenderName + " Priority: " + mPriority);
+        } else {
+            mSubject = null;
+            mDatetime = null;
+            mSenderName = null;
+            mPriority = null;
+        }
     }
 
     private Type parseType(String type) throws IllegalArgumentException {
@@ -122,6 +152,14 @@ public class BluetoothMapEventReport {
         }
 
         throw new IllegalArgumentException("Invalid value for msg_type: " + msgType);
+    }
+
+    /**
+     * @return value corresponding to <code>version</code> parameter in MAP
+     *         specification
+     */
+    public String getVersion() {
+        return mVersion;
     }
 
     /**
@@ -164,16 +202,53 @@ public class BluetoothMapEventReport {
         return mMsgType;
     }
 
+    /**
+     * @return value corresponding to <code>subject</code> parameter in MAP
+     *         specification
+     */
+    public String getSubject() {
+        return mSubject;
+    }
+
+    /**
+     * @return value corresponding to <code>datetime"</code> parameter in MAP
+     *         specification
+     */
+    public String getDatetime() {
+        return mDatetime;
+    }
+
+   /**
+     * @return value corresponding to <code>sender_name"</code> parameter in MAP
+     *         specification
+     */
+    public String getSenderName() {
+        return mSenderName;
+    }
+
+   /**
+     * @return value corresponding to <code>priority"</code> parameter in MAP
+     *         specification
+     */
+    public String getPriority() {
+        return mPriority;
+    }
+
     @Override
     public String toString() {
         JSONObject json = new JSONObject();
 
         try {
+            json.put("version", mVersion);
             json.put("type", mType);
             json.put("handle", mHandle);
             json.put("folder", mFolder);
             json.put("old_folder", mOldFolder);
             json.put("msg_type", mMsgType);
+            json.put("subject", mSubject);
+            json.put("datetime", mDatetime);
+            json.put("sender_name", mSenderName);
+            json.put("priority", mPriority);
         } catch (JSONException e) {
             // do nothing
         }
@@ -188,13 +263,17 @@ public class BluetoothMapEventReport {
             XmlPullParser xpp = XmlPullParserFactory.newInstance().newPullParser();
             xpp.setInput(in, "utf-8");
 
+            HashMap<String, String> attrs = new HashMap<String, String>();
             int event = xpp.getEventType();
             while (event != XmlPullParser.END_DOCUMENT) {
                 switch (event) {
                     case XmlPullParser.START_TAG:
-                        if (xpp.getName().equals("event")) {
-                            HashMap<String, String> attrs = new HashMap<String, String>();
+                        if (xpp.getName().equals("MAP-event-report")) {
+                            Log.d(TAG, "MAP-event-report version: " + xpp.getAttributeValue(0));
+                            attrs.put(xpp.getAttributeName(0), xpp.getAttributeValue(0));
+                        }
 
+                        if (xpp.getName().equals("event")) {
                             for (int i = 0; i < xpp.getAttributeCount(); i++) {
                                 attrs.put(xpp.getAttributeName(i), xpp.getAttributeValue(i));
                             }

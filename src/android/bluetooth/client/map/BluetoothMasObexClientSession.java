@@ -25,6 +25,7 @@ import java.io.IOException;
 import javax.obex.ClientSession;
 import javax.obex.HeaderSet;
 import javax.obex.ObexTransport;
+import javax.obex.ObexHelper;
 import javax.obex.ResponseCodes;
 
 class BluetoothMasObexClientSession {
@@ -109,6 +110,7 @@ class BluetoothMasObexClientSession {
 
         private void connect() {
             try {
+                Log.w(TAG, "connect:");
                 mSession = new ClientSession(mTransport);
 
                 HeaderSet headerset = new HeaderSet();
@@ -122,10 +124,12 @@ class BluetoothMasObexClientSession {
                     disconnect();
                 }
             } catch (IOException e) {
+                Log.w(TAG, "handled connect exception: ", e);
             }
         }
 
         private void disconnect() {
+            Log.w(TAG, "disconnect: ");
             try {
                 mSession.disconnect(null);
             } catch (IOException e) {
@@ -134,6 +138,7 @@ class BluetoothMasObexClientSession {
             try {
                 mSession.close();
             } catch (IOException e) {
+                Log.w(TAG, "handled disconnect exception:", e);
             }
 
             mConnected = false;
@@ -185,6 +190,26 @@ class BluetoothMasObexClientSession {
     public boolean makeRequest(BluetoothMasRequest request) {
         if (mClientThread == null) {
             return false;
+        }
+
+        if (((BluetoothMapTransport)mTransport).isSrmSupported()) {
+            Log.d(TAG, "Client is srm capable");
+            if (request instanceof BluetoothMasRequestGetFolderListing ||
+                request instanceof BluetoothMasRequestGetFolderListingSize ||
+                request instanceof BluetoothMasRequestGetMessagesListing ||
+                request instanceof BluetoothMasRequestGetMessage ||
+                request instanceof BluetoothMasRequestPushMessage ||
+                request instanceof BluetoothMasRequestGetMessagesListingSize) {
+                mClientThread.mSession.setLocalSrmStatus(true);
+            }
+
+            if (request instanceof BluetoothMasRequestSetMessageStatus ||
+                request instanceof BluetoothMasRequestUpdateInbox||
+                request instanceof BluetoothMasRequestSetNotificationRegistration) {
+                mClientThread.mSession.setLocalSrmStatus(false);
+            }
+        } else {
+                Log.d(TAG, "Client is not srm capable");
         }
 
         return mClientThread.schedule(request);

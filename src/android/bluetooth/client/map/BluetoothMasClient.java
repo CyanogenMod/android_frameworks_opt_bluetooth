@@ -45,6 +45,8 @@ public class BluetoothMasClient {
 
     private static final int SOCKET_ERROR = 11;
 
+    private static final int L2CAP_INVALID_PSM = -1;
+
     /**
      * Callback message sent when connection state changes
      * <p>
@@ -323,7 +325,7 @@ public class BluetoothMasClient {
             if (client == null) {
                 return;
             }
-            Log.v(TAG, "handleMessage  "+msg.what);
+            Log.v(TAG, "handleMessage  " + msg.what);
 
             switch (msg.what) {
                 case SOCKET_ERROR:
@@ -348,6 +350,10 @@ public class BluetoothMasClient {
                     break;
 
                 case BluetoothMasObexClientSession.MSG_OBEX_DISCONNECTED:
+                    if (client.mMnsService != null) {
+                        //Special case, when Mas session is disconnected before Mns Session
+                        client.mMnsService.unregisterCallback(client.mMas.getMasInstanceId());
+                    }
                     client.mConnectionState = ConnectionState.DISCONNECTED;
                     client.mNotificationEnabled = false;
                     client.mObexSession = null;
@@ -467,20 +473,53 @@ public class BluetoothMasClient {
 
         @Override
         public void run() {
+            int btMasTransportType;
+            if (connectL2capSocket())
+                btMasTransportType = BluetoothSocket.TYPE_L2CAP;
+            else if (connectRfcommSocket())
+                btMasTransportType = BluetoothSocket.TYPE_RFCOMM;
+            else
+            {
+                Log.e(TAG, "Error when creating/connecting L2CAP/RFCOMM socket");
+                return;
+            }
+            BluetoothMapTransport transport;
+            transport = new BluetoothMapTransport(socket, btMasTransportType);
+
+            mSessionHandler.obtainMessage(SOCKET_CONNECTED, transport).sendToTarget();
+        }
+
+        private boolean connectL2capSocket() {
             try {
+                /* Use BluetoothSocket to connect */
+                Log.v(TAG,"connectL2capSocket: PSM: " + mMas.getL2capPsm());
+                if (mMas.getL2capPsm() != L2CAP_INVALID_PSM) {
+                    socket = mDevice.createL2capSocket(mMas.getL2capPsm());
+                    socket.connect();
+                } else {
+                    return false;
+                }
+
+            } catch (IOException e) {
+                Log.e(TAG, "Error when creating/connecting L2cap socket", e);
+                return false;
+            }
+            return true;
+        }
+
+        private boolean connectRfcommSocket() {
+            try {
+                /* Use BluetoothSocket to connect */
+                Log.v(TAG,"connectRfcommSocket: channel: " + mMas.getRfcommCannelNumber());
                 socket = mDevice.createRfcommSocket(mMas.getRfcommCannelNumber());
                 socket.connect();
-
-                BluetoothMapRfcommTransport transport;
-                transport = new BluetoothMapRfcommTransport(socket);
-
-                mSessionHandler.obtainMessage(SOCKET_CONNECTED, transport).sendToTarget();
             } catch (IOException e) {
                 Log.e(TAG, "Error when creating/connecting socket", e);
-
                 closeSocket();
                 mSessionHandler.obtainMessage(SOCKET_ERROR).sendToTarget();
+                return false;
             }
+            return true;
         }
 
         @Override
@@ -674,7 +713,7 @@ public class BluetoothMasClient {
     }
 
     private boolean disableNotifications() {
-        Log.v(TAG, "enableNotifications()");
+        Log.v(TAG, "disableNotifications()");
 
         if (mMnsService != null) {
             mMnsService.unregisterCallback(mMas.getMasInstanceId());

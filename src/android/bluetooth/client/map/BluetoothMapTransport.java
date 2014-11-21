@@ -25,13 +25,17 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 import javax.obex.ObexTransport;
+import javax.obex.ObexHelper;
 
-class BluetoothMapRfcommTransport implements ObexTransport {
+class BluetoothMapTransport implements ObexTransport {
+    private static final String TAG = "BluetoothMapTransport";
     private final BluetoothSocket mSocket;
+    public final int mType;
 
-    public BluetoothMapRfcommTransport(BluetoothSocket socket) {
+    public BluetoothMapTransport(BluetoothSocket socket, int type) {
         super();
-        mSocket = socket;
+        this.mSocket = socket;
+        this.mType = type;
     }
 
     @Override
@@ -77,16 +81,22 @@ class BluetoothMapRfcommTransport implements ObexTransport {
 
     @Override
     public int getMaxTransmitPacketSize() {
-        return -1;
+        if (mSocket.getConnectionType() != BluetoothSocket.TYPE_L2CAP) {
+            return -1;
+        }
+        return mSocket.getMaxTransmitPacketSize();
     }
 
     @Override
     public int getMaxReceivePacketSize() {
-        return -1;
+        if (mSocket.getConnectionType() != BluetoothSocket.TYPE_L2CAP) {
+            return -1;
+        }
+        return mSocket.getMaxReceivePacketSize();
     }
 
     @Override
     public boolean isSrmSupported() {
-        return false;
+        return mType == BluetoothSocket.TYPE_L2CAP;
     }
 }
