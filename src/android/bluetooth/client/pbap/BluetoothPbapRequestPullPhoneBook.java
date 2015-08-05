@@ -72,11 +72,7 @@ final class BluetoothPbapRequestPullPhoneBook extends BluetoothPbapRequest {
          * maxListCount is a special case which is handled in
          * BluetoothPbapRequestPullPhoneBookSize
          */
-        if (maxListCount > 0) {
-            oap.add(OAP_TAGID_MAX_LIST_COUNT, (short) maxListCount);
-        } else {
-            oap.add(OAP_TAGID_MAX_LIST_COUNT, (short) 65535);
-        }
+        oap.add(OAP_TAGID_MAX_LIST_COUNT, (short) maxListCount);
 
         if (listStartOffset > 0) {
             oap.add(OAP_TAGID_LIST_START_OFFSET, (short) listStartOffset);
