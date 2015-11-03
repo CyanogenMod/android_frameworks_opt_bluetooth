@@ -179,9 +179,9 @@ class BluetoothMasObexClientSession {
         if (mClientThread != null) {
             mClientThread.shutdown();
 
-            (new Thread() {
-                @Override
-                public void run() {
+            Thread t = new Thread(new Runnable() {
+                public void run () {
+                    Log.d(TAG, "Spawning a new thread for stopping obex session");
                     try {
                         mClientThread.join();
                         mClientThread = null;
@@ -189,7 +189,9 @@ class BluetoothMasObexClientSession {
                         Log.w(TAG, "Interrupted while waiting for thread to join");
                     }
                 }
-            }).run();
+            });
+            t.start();
+            Log.d(TAG, "Exiting from the stopping thread");
         }
     }
 
