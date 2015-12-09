@@ -17,9 +17,13 @@
 package android.bluetooth.client.pbap;
 
 import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Looper;
+import android.os.Message;
 import android.util.Log;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 
 import javax.obex.ClientSession;
 import javax.obex.HeaderSet;
@@ -27,6 +31,7 @@ import javax.obex.ObexTransport;
 import javax.obex.ResponseCodes;
 
 final class BluetoothPbapObexSession {
+    private static final boolean DBG = true;
     private static final String TAG = "BluetoothPbapObexSession";
 
     private static final byte[] PBAP_TARGET = new byte[] {
@@ -42,64 +47,161 @@ final class BluetoothPbapObexSession {
     final static int OBEX_SESSION_AUTHENTICATION_REQUEST = 105;
     final static int OBEX_SESSION_AUTHENTICATION_TIMEOUT = 106;
 
+    final static int MSG_CONNECT = 0;
+    final static int MSG_REQUEST = 1;
+
+    final static int CONNECTED = 0;
+    final static int CONNECTING = 1;
+    final static int DISCONNECTED = 2;
+
     private Handler mSessionHandler;
     private final ObexTransport mTransport;
-    private ObexClientThread mObexClientThread;
+    // private ObexClientThread mObexClientThread;
     private BluetoothPbapObexAuthenticator mAuth = null;
+    private HandlerThread mThread;
+    private Handler mHandler;
+    private ClientSession mClientSession;
+
+    private int mState = DISCONNECTED;
 
     public BluetoothPbapObexSession(ObexTransport transport) {
         mTransport = transport;
     }
 
-    public void start(Handler handler) {
+    public synchronized boolean start(Handler handler) {
         Log.d(TAG, "start");
+
+        if (mState == CONNECTED || mState == CONNECTING) {
+            return false;
+        }
+        mState = CONNECTING;
         mSessionHandler = handler;
 
         mAuth = new BluetoothPbapObexAuthenticator(mSessionHandler);
 
-        mObexClientThread = new ObexClientThread();
-        mObexClientThread.start();
+        // Start the thread to process requests (see {@link schedule()}.
+        mThread = new HandlerThread("BluetoothPbapObexSessionThread");
+        mThread.start();
+        mHandler = new ObexClientHandler(mThread.getLooper(), this);
+
+        // Make connect call non blocking.
+        boolean status = mHandler.sendMessage(mHandler.obtainMessage(MSG_CONNECT));
+        if (!status) {
+            mState = DISCONNECTED;
+            return false;
+        } else {
+            return true;
+        }
     }
 
     public void stop() {
-        Log.d(TAG, "stop");
-
-        if (mObexClientThread != null) {
-            try {
-                mObexClientThread.interrupt();
-                mObexClientThread.join();
-                mObexClientThread = null;
-            } catch (InterruptedException e) {
-            }
+        if (DBG) {
+            Log.d(TAG, "stop");
         }
+
+        // This will essentially stop the handler and ignore any inflight requests.
+        mThread.quit();
+
+        // We clean up the state here.
+        disconnect(false /* no callback */);
     }
 
     public void abort() {
-        Log.d(TAG, "abort");
-
-        if (mObexClientThread != null && mObexClientThread.mRequest != null) {
-            /*
-             * since abort may block until complete GET is processed inside OBEX
-             * session, let's run it in separate thread so it won't block UI
-             */
-            (new Thread() {
-                @Override
-                public void run() {
-                    mObexClientThread.mRequest.abort();
-                }
-            }).run();
-        }
+        stop();
     }
 
     public boolean schedule(BluetoothPbapRequest request) {
-        Log.d(TAG, "schedule: " + request.getClass().getSimpleName());
-
-        if (mObexClientThread == null) {
-            Log.e(TAG, "OBEX session not started");
-            return false;
+        if (DBG) {
+            Log.d(TAG, "schedule() called with: " + request);
         }
 
-        return mObexClientThread.schedule(request);
+        boolean status = mHandler.sendMessage(mHandler.obtainMessage(MSG_REQUEST, request));
+        if (!status) {
+            Log.e(TAG, "Adding messages failed, obex must be disconnected.");
+            return false;
+        }
+        return true;
+    }
+
+    public int isConnected() {
+        return mState;
+    }
+
+    private void connect() {
+       if (DBG) {
+          Log.d(TAG, "connect()");
+       }
+
+       boolean success = true;
+       try {
+          mClientSession = new ClientSession(mTransport);
+          mClientSession.setAuthenticator(mAuth);
+       } catch (IOException e) {
+          Log.d(TAG, "connect() exception: " + e);
+          success = false;
+       }
+
+       HeaderSet hs = new HeaderSet();
+       hs.setHeader(HeaderSet.TARGET, PBAP_TARGET);
+       try {
+          hs = mClientSession.connect(hs);
+
+          if (hs.getResponseCode() != ResponseCodes.OBEX_HTTP_OK) {
+              disconnect(true  /* callback */);
+              success = false;
+          }
+       } catch (IOException e) {
+          success = false;
+       }
+
+       synchronized (this) {
+           if (success) {
+              mSessionHandler.obtainMessage(OBEX_SESSION_CONNECTED).sendToTarget();
+              mState = CONNECTED;
+           } else {
+              mSessionHandler.obtainMessage(OBEX_SESSION_DISCONNECTED).sendToTarget();
+              mState = DISCONNECTED;
+           }
+       }
+    }
+
+    private synchronized void disconnect(boolean callback) {
+        if (DBG) {
+            Log.d(TAG, "disconnect()");
+        }
+
+        if (mState != DISCONNECTED) {
+            return;
+        }
+
+        if (mClientSession != null) {
+            try {
+                mClientSession.disconnect(null);
+                mClientSession.close();
+            } catch (IOException e) {
+            }
+        }
+
+        if (callback) {
+            mSessionHandler.obtainMessage(OBEX_SESSION_DISCONNECTED).sendToTarget();
+        }
+
+        mState = DISCONNECTED;
+    }
+
+    private void executeRequest(BluetoothPbapRequest req) {
+        try {
+            req.execute(mClientSession);
+        } catch (IOException e) {
+            Log.e(TAG, "Error during executeRequest " + e);
+            disconnect(true);
+        }
+
+        if (req.isSuccess()) {
+            mSessionHandler.obtainMessage(OBEX_SESSION_REQUEST_COMPLETED, req).sendToTarget();
+        } else {
+            mSessionHandler.obtainMessage(OBEX_SESSION_REQUEST_FAILED, req).sendToTarget();
+        }
     }
 
     public boolean setAuthReply(String key) {
@@ -114,119 +216,38 @@ final class BluetoothPbapObexSession {
         return true;
     }
 
-    private class ObexClientThread extends Thread {
+    private static class ObexClientHandler extends Handler {
+        WeakReference<BluetoothPbapObexSession> mInst;
 
-        private static final String TAG = "ObexClientThread";
-
-        private ClientSession mClientSession;
-        private BluetoothPbapRequest mRequest;
-
-        private volatile boolean mRunning = true;
-
-        public ObexClientThread() {
-
-            mClientSession = null;
-            mRequest = null;
+        ObexClientHandler(Looper looper, BluetoothPbapObexSession inst) {
+            super(looper);
+            mInst = new WeakReference<BluetoothPbapObexSession>(inst);
         }
 
         @Override
-        public void run() {
-            super.run();
-
-            if (!connect()) {
-                mSessionHandler.obtainMessage(OBEX_SESSION_FAILED).sendToTarget();
+        public void handleMessage(Message msg) {
+            BluetoothPbapObexSession inst = mInst.get();
+            if (inst == null) {
+                Log.e(TAG, "The instance class is no longer around; terminating.");
                 return;
             }
 
-            mSessionHandler.obtainMessage(OBEX_SESSION_CONNECTED).sendToTarget();
-
-            while (mRunning) {
-                synchronized (this) {
-                    try {
-                        if (mRequest == null) {
-                            this.wait();
-                        }
-                    } catch (InterruptedException e) {
-                        mRunning = false;
-                        break;
-                    }
-                }
-
-                if (mRunning && mRequest != null) {
-                    try {
-                        mRequest.execute(mClientSession);
-                    } catch (IOException e) {
-                        // this will "disconnect" for cleanup
-                        mRunning = false;
-                    }
-
-                    if (mRequest.isSuccess()) {
-                        mSessionHandler.obtainMessage(OBEX_SESSION_REQUEST_COMPLETED, mRequest)
-                                .sendToTarget();
-                    } else {
-                        mSessionHandler.obtainMessage(OBEX_SESSION_REQUEST_FAILED, mRequest)
-                                .sendToTarget();
-                    }
-                }
-
-                mRequest = null;
+            if (inst.isConnected() != CONNECTED && msg.what != MSG_CONNECT) {
+                Log.w(TAG, "Cannot execute " + msg + " when not CONNECTED.");
+                return;
             }
 
-            disconnect();
-
-            mSessionHandler.obtainMessage(OBEX_SESSION_DISCONNECTED).sendToTarget();
-        }
-
-        public synchronized boolean schedule(BluetoothPbapRequest request) {
-            Log.d(TAG, "schedule: " + request.getClass().getSimpleName());
-
-            if (mRequest != null) {
-                return false;
-            }
-
-            mRequest = request;
-            notify();
-
-            return true;
-        }
-
-        private boolean connect() {
-            Log.d(TAG, "connect");
-
-            try {
-                mClientSession = new ClientSession(mTransport);
-                mClientSession.setAuthenticator(mAuth);
-            } catch (IOException e) {
-                return false;
-            }
-
-            HeaderSet hs = new HeaderSet();
-            hs.setHeader(HeaderSet.TARGET, PBAP_TARGET);
-
-            try {
-                hs = mClientSession.connect(hs);
-
-                if (hs.getResponseCode() != ResponseCodes.OBEX_HTTP_OK) {
-                    disconnect();
-                    return false;
-                }
-            } catch (IOException e) {
-                return false;
-            }
-
-            return true;
-        }
-
-        private void disconnect() {
-            Log.d(TAG, "disconnect");
-
-            if (mClientSession != null) {
-                try {
-                    mClientSession.disconnect(null);
-                    mClientSession.close();
-                } catch (IOException e) {
-                }
+            switch (msg.what) {
+                case MSG_CONNECT:
+                    inst.connect();
+                    break;
+                case MSG_REQUEST:
+                    inst.executeRequest((BluetoothPbapRequest) msg.obj);
+                    break;
+                default:
+                    Log.e(TAG, "Unknwown message type: " + msg.what);
             }
         }
     }
 }
+

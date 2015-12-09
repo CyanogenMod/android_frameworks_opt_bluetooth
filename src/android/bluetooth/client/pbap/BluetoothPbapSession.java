@@ -254,6 +254,10 @@ class BluetoothPbapSession implements Callback {
 
         if (mConnectThread != null) {
             try {
+                // Force close the socket in case the thread is stuck doing the connect()
+                // call.
+                mConnectThread.closeSocket();
+                // TODO: Add timed join if closeSocket does not clean up the state.
                 mConnectThread.join();
             } catch (InterruptedException e) {
             }
@@ -317,7 +321,8 @@ class BluetoothPbapSession implements Callback {
 
         }
 
-        private void closeSocket() {
+        // This method may be called from outside the thread if the connect() call above is stuck.
+        public void closeSocket() {
             try {
                 if (mSocket != null) {
                     mSocket.close();
