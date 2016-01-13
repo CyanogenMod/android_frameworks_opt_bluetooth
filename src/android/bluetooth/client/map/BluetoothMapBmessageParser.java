@@ -39,7 +39,7 @@ import java.text.ParseException;
 class BluetoothMapBmessageParser {
 
     private final static String TAG = "BluetoothMapBmessageParser";
-    private final boolean DBG = false;
+    private final static boolean DBG = false;
 
     private final static String CRLF = "\r\n";
 
