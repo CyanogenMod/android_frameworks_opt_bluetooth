@@ -16,6 +16,7 @@
 
 package android.bluetooth.client.pbap;
 
+import android.accounts.Account;
 import android.util.Log;
 
 import com.android.vcard.VCardEntry;
@@ -37,13 +38,16 @@ final class BluetoothPbapRequestPullPhoneBook extends BluetoothPbapRequest {
 
     private BluetoothPbapVcardList mResponse;
 
+    private Account mAccount;
+
     private int mNewMissedCalls = -1;
 
     private final byte mFormat;
 
-    public BluetoothPbapRequestPullPhoneBook(String pbName, long filter, byte format,
+    public BluetoothPbapRequestPullPhoneBook(
+            String pbName, Account account, long filter, byte format,
             int maxListCount, int listStartOffset) {
-
+        mAccount = account;
         if (maxListCount < 0 || maxListCount > 65535) {
             throw new IllegalArgumentException("maxListCount should be [0..65535]");
         }
@@ -93,7 +97,7 @@ final class BluetoothPbapRequestPullPhoneBook extends BluetoothPbapRequest {
     protected void readResponse(InputStream stream) throws IOException {
         Log.v(TAG, "readResponse");
 
-        mResponse = new BluetoothPbapVcardList(stream, mFormat);
+        mResponse = new BluetoothPbapVcardList(mAccount, stream, mFormat);
         if (DBG) {
             Log.d(TAG, "Read " + mResponse.getCount() + " entries.");
         }

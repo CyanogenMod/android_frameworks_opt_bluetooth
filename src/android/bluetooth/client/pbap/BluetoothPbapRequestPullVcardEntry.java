@@ -16,6 +16,7 @@
 
 package android.bluetooth.client.pbap;
 
+import android.accounts.Account;
 import android.util.Log;
 
 import com.android.vcard.VCardEntry;
@@ -35,9 +36,14 @@ final class BluetoothPbapRequestPullVcardEntry extends BluetoothPbapRequest {
 
     private BluetoothPbapVcardList mResponse;
 
+    private final Account mAccount;
+
     private final byte mFormat;
 
-    public BluetoothPbapRequestPullVcardEntry(String handle, long filter, byte format) {
+    public BluetoothPbapRequestPullVcardEntry(
+            String handle, Account account, long filter, byte format) {
+        mAccount = account;
+
         mHeaderSet.setHeader(HeaderSet.NAME, handle);
 
         mHeaderSet.setHeader(HeaderSet.TYPE, TYPE);
@@ -64,7 +70,7 @@ final class BluetoothPbapRequestPullVcardEntry extends BluetoothPbapRequest {
     protected void readResponse(InputStream stream) throws IOException {
         Log.v(TAG, "readResponse");
 
-        mResponse = new BluetoothPbapVcardList(stream, mFormat);
+        mResponse = new BluetoothPbapVcardList(mAccount, stream, mFormat);
     }
     @Override
     protected void checkResponseCode(int responseCode) throws IOException {

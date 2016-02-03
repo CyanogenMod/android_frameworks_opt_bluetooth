@@ -16,6 +16,9 @@
 
 package android.bluetooth.client.pbap;
 
+import android.accounts.Account;
+
+import com.android.vcard.VCardConfig;
 import com.android.vcard.VCardEntry;
 import com.android.vcard.VCardEntryConstructor;
 import com.android.vcard.VCardEntryCounter;
@@ -32,6 +35,7 @@ import java.util.ArrayList;
 class BluetoothPbapVcardList {
 
     private final ArrayList<VCardEntry> mCards = new ArrayList<VCardEntry>();
+    private final Account mAccount;
 
     class CardEntryHandler implements VCardEntryHandler {
         @Override
@@ -48,7 +52,8 @@ class BluetoothPbapVcardList {
         }
     }
 
-    public BluetoothPbapVcardList(InputStream in, byte format) throws IOException {
+    public BluetoothPbapVcardList(Account account, InputStream in, byte format) throws IOException {
+        mAccount = account;
         parse(in, format);
     }
 
@@ -61,7 +66,8 @@ class BluetoothPbapVcardList {
             parser = new VCardParser_V21();
         }
 
-        VCardEntryConstructor constructor = new VCardEntryConstructor();
+        VCardEntryConstructor constructor =
+            new VCardEntryConstructor(VCardConfig.VCARD_TYPE_V21_GENERIC, mAccount);
         VCardEntryCounter counter = new VCardEntryCounter();
         CardEntryHandler handler = new CardEntryHandler();
 
