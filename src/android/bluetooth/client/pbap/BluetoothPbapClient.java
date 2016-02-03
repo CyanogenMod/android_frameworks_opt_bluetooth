@@ -16,6 +16,7 @@
 
 package android.bluetooth.client.pbap;
 
+import android.accounts.Account;
 import android.bluetooth.BluetoothDevice;
 import android.os.Handler;
 import android.os.Message;
@@ -72,6 +73,8 @@ import java.lang.ref.WeakReference;
  * connection and disconnection happens automatically internally.
  */
 public class BluetoothPbapClient {
+    private static final boolean DBG = true;
+
     private static final String TAG = "BluetoothPbapClient";
 
     /**
@@ -372,6 +375,7 @@ public class BluetoothPbapClient {
         DISCONNECTED, CONNECTING, CONNECTED, DISCONNECTING;
     }
 
+    private final Account mAccount;
     private final Handler mClientHandler;
     private final BluetoothPbapSession mSession;
     private ConnectionState mConnectionState = ConnectionState.DISCONNECTED;
@@ -503,14 +507,20 @@ public class BluetoothPbapClient {
      *
      * @param device BluetoothDevice that corresponds to remote acting in PSE
      *            role
+     * @param account the account to which contacts will be added {@see #pullPhoneBook}.
      * @param handler the handle that will be used by PCE to notify events and
      *            results to application
      * @throws NullPointerException
      */
-    public BluetoothPbapClient(BluetoothDevice device, Handler handler) {
-        if (device == null) {
-            throw new NullPointerException("BluetothDevice is null");
+    public BluetoothPbapClient(BluetoothDevice device, Account account, Handler handler) {
+        if (DBG) {
+            Log.d(TAG, " device " + device + " account " + account);
         }
+        if (device == null) {
+            throw new NullPointerException("BluetoothDevice is null");
+        }
+
+        mAccount = account;
 
         mClientHandler = handler;
 
@@ -696,8 +706,8 @@ public class BluetoothPbapClient {
      */
     public boolean pullPhoneBook(String pbName, long filter, byte format, int maxListCount,
             int listStartOffset) {
-        BluetoothPbapRequest req = new BluetoothPbapRequestPullPhoneBook(pbName, filter, format,
-                maxListCount, listStartOffset);
+        BluetoothPbapRequest req = new BluetoothPbapRequestPullPhoneBook(
+                pbName, mAccount, filter, format, maxListCount, listStartOffset);
         return mSession.makeRequest(req);
     }
 
@@ -835,7 +845,8 @@ public class BluetoothPbapClient {
      * @link #EVENT_PULL_VCARD_ERROR} in case of failure
      */
     public boolean pullVcardEntry(String handle, long filter, byte format) {
-        BluetoothPbapRequest req = new BluetoothPbapRequestPullVcardEntry(handle, filter, format);
+        BluetoothPbapRequest req =
+                new BluetoothPbapRequestPullVcardEntry(handle, mAccount, filter, format);
         return mSession.makeRequest(req);
     }
 
