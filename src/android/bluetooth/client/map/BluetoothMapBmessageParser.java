@@ -287,7 +287,7 @@ class BluetoothMapBmessageParser {
 
             } else if (prop.name.equals("LENGTH")) {
                 try {
-                    mBmsg.mBbodyLength = Integer.valueOf(prop.value);
+                    mBmsg.mBbodyLength = Integer.parseInt(prop.value);
                 } catch (NumberFormatException e) {
                     throw new ParseException("Invalid LENGTH value", mParser.pos());
                 }
